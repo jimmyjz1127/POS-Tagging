@@ -202,6 +202,7 @@ class Tagger():
                 initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[0][0])
             viterbi.append(initial)
 
+            # Intermediary
             i = 1
             while (i < len(sentence) - 1):
                 token = sentence[i][0]
@@ -215,6 +216,7 @@ class Tagger():
         
             final = {}
 
+            # Finish
             for tag in self.tags:
                 final[tag] = viterbi[i-1][tag] + self.transitions.logprob((tag,'END'))
             viterbi.append(final)
@@ -233,6 +235,89 @@ class Tagger():
             result.append(sen_result)
 
         return result
+    
+    def welch_baum_tag(self):
+        sentences=self.test_sents
+
+        result = []
+
+        for sentence in sentences:
+            forward = []
+            backward = []
+
+            # INITIAL 
+            initial_f = {} 
+            initial_b = {}
+            
+            for tag in self.tags:
+                initial_f[tag] = self.transitions.logprob(('START', tag)) + self.emissions[tag].logprob(sentence[0][0])
+                initial_b[tag] = self.transitions.logprob((tag, 'END'))
+            forward.append(initial_f)
+            backward.append(initial_b)
+
+            # INTERMEDIARY 
+            i = 1 
+            while (i < len(sentence) - 1):
+                j = len(sentence) - i
+                token_f = sentence[i][0]
+                token_b = sentence[j][0]
+                intermed_f = {}
+                intermed_b = {}
+
+                for tag in self.tags:
+                    inner_f = [forward[i - 1][prev_tag] + self.transitions.logprob((prev_tag, tag)) + self.emissions[tag].logprob(token_f) for prev_tag in self.tags]
+                    inner_b = [backward[i - 1][next_tag] + self.transitions.logprob((tag, next_tag)) + self.emissions[next_tag].logprob(token_b) for next_tag in self.tags]
+
+                    intermed_f[tag] = self.logsumexp(inner_f)
+                    intermed_b[tag] = self.logsumexp(inner_b)
+
+                forward.append(intermed_f)
+                backward.append(intermed_b)
+                i += 1
+
+            # FINAL
+            final_f = {}
+            final_b = {}
+            final_f['END'] = self.logsumexp([forward[i-1][tag] + self.transitions.logprob((tag, 'END')) for tag in self.tags])
+            final_b['START'] = self.logsumexp([backward[i-1][tag] + self.transitions.logprob(('START', tag)) + self.emissions[tag].logprob(sentence[0][0]) for tag in self.tags])
+            forward.append(final_f)
+            backward.append(final_b)
+
+            backward.reverse()
+
+            #Back Track
+            sen_result = []
+            sen_result.append(("<s>", "START"))
+            for i in range(1, len(sentence) - 1):
+                word = sentence[i][0]
+                f_col = forward[i]
+                b_col = backward[i]
+                combined = self.combine_dicts(f_col, b_col)
+
+                max_tag = max(combined.items(), key = lambda obj:obj[1])[0]
+
+                sen_result.append((word, max_tag))
+            sen_result.append(("</s>", "END"))
+                
+            result.append(sen_result)
+
+        return result
+
+    def combine_dicts(self, dict1, dict2):
+        result = {}
+        for key in dict1.keys():
+            result[key] = dict1[key] + dict2[key]
+        return result
+
+    # Adding a list of probabilities represented as log probabilities.
+    def logsumexp(self, vals):
+        if len(vals) == 0:
+            return self.min_log_prob
+        m = max(vals)
+        if m == self.min_log_prob:
+            return self.min_log_prob
+        else:
+            return m + log(sum([exp(val - m) for val in vals]))
 
     def calc_accuracy(self, predictions):
         num_correct = 0.0
@@ -253,15 +338,19 @@ class Tagger():
         return num_correct/total
 
 def main():
-    tagger = Tagger('ko')
+    tagger = Tagger('en')
 
-    result = tagger.viterbi_tag()
+    # result = tagger.viterbi_tag()
     
-    print('Viterbi :', tagger.calc_accuracy(result))
+    # print('Viterbi :', tagger.calc_accuracy(result))
 
-    result = tagger.eager_tag()
+    # result = tagger.eager_tag()
 
-    print('Eager :', tagger.calc_accuracy(result))
+    # print('Eager :', tagger.calc_accuracy(result))
+
+    result = tagger.welch_baum_tag()
+
+    print('F-B :', tagger.calc_accuracy(result))
     
     
 if __name__ == '__main__':
