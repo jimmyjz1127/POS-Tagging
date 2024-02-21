@@ -22,27 +22,27 @@ class Bijection():
     def __init__(self, elems):
         self.to_id = {}
         self.to_text = {}
+        self.index = 1
 
         self.setup(elems)
 
     def setup(self, elems):
-        index = 1 
         for elem in elems:
-            self.to_id[elem] = index
-            self.to_text[index] = elem
-            index += 1
+            self.to_id[elem] = self.index
+            self.to_text[self.index] = elem
+            self.index += 1
 
     def __getitem__(self, key):
         if isinstance(key, int):
             try:
                 return self.to_text[key]
             except KeyError:
-                return 'UNK'
+                return 0
         else:
             try:
                 return self.to_id[key]
             except KeyError:
-                return 0
+                return 'UNK'
 
     def __setitem__(self, key, value):
         if isinstance(key, int):
@@ -51,6 +51,9 @@ class Bijection():
         else:
             self.to_text[value] = key
             self.to_id[key] = value
+
+    def __len__(self):
+        return len(self.to_text.keys())
 
 class Tagger():
    
@@ -61,18 +64,19 @@ class Tagger():
         self.test_sents = conllu_corpus(test_corpus(lang))
 
         # Setup bijection between text to integer index for tags and types 
-        self.word_vocab, self.tag_vocab = self.setup_vocab(self.train_sents)
+        # self.word_vocab, self.tag_vocab = self.setup_vocab(self.train_sents)
 
         # pre-process train and test sentences 
         self.train_sents = self.preprocess_sentences(self.train_sents)
         self.test_sents =  self.preprocess_sentences(self.test_sents)
 
         # get set of all unique tags 
-        self.tags = set([tag for sentence in self.train_sents for ( _, tag) in sentence])
+        self.tags = set([ tag for sentence in self.train_sents for ( _, tag) in sentence])
+        self.words = set([w for sentence in self.train_sents for (w,_) in sentence])
 
         # get smoothed emission and transisions (bigram)
-        self.smoothed_emissions_dist = self.init_smoothed_emission_dist(self.train_sents, self.tags)
-        self.smoothed_transitions_dist = self.init_smoothed_transition_dist(self.train_sents)
+        self.emissions = self.init_smoothed_emission_dist(self.train_sents, self.tags)
+        self.transitions = self.init_smoothed_transition_dist(self.train_sents)
 
 
     def setup_vocab(self, sentences):
@@ -106,12 +110,12 @@ class Tagger():
         
         # Convert conllu format to tuples of form (id, word, tag)
         for sentence in sentences:  
-            sent = [(self.word_vocab['<s>'], self.tag_vocab['START'])]
+            sent = [('<s>', 'START')]
 
             for token in sentence:
-                sent.append((self.word_vocab[token['form']], self.tag_vocab[token['upos']]))
+                sent.append((token['form'], token['upos']))
 
-            sent.append((self.word_vocab['</s>'], self.tag_vocab['END']))
+            sent.append(('</s>', 'END'))
             sents.append(sent)
 
         return sents
@@ -131,6 +135,7 @@ class Tagger():
             words = [w for sentence in sentences for (w, t) in sentence if t == tag]
             distribution[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
 
+    
         return distribution
     
     def init_smoothed_transition_dist(self, sentences):
@@ -152,15 +157,7 @@ class Tagger():
 
         return transition_trellis
 
-    def test(self):
-        return None
-        
-
-class EagerTagger(Tagger):
-    def __init__(self, lang):
-        super().__init__(lang)
-    
-    def tag(self):
+    def eager_tag(self):
         start = time.time()
         sentences=self.test_sents[0:10]
         result = [] # will contain list of sentences, tagged using eager algorithm
@@ -172,8 +169,8 @@ class EagerTagger(Tagger):
                 word = token[0] # the word to predict tag for 
 
                 # list of all possible (tag, emission_prob * transistion_prob) for the given word
-                probs = [(tag, self.smoothed_emissions_dist[tag].prob(word) * self.smoothed_transitions_dist.prob((prev_tag, tag))) for tag in self.tags]
-               
+                probs = [(tag, self.emissions[tag].prob(word) * self.transitions.prob((prev_tag, tag))) for tag in self.tags]
+
                 # tag with highest probability 
                 max_prob_tag = max(probs, key=lambda obj:obj[1])[0]
 
@@ -186,26 +183,54 @@ class EagerTagger(Tagger):
         print(end - start)
 
         return result
+        
 
-    def convert(self, sentences):
-        sents = []
+    def viterbi_tag(self):
+        sentences=self.test_sents[0:10]
+
+        result = []
+         
         for sentence in sentences:
-            sent = []
-            for token in sentence:
-                sent.append((self.word_vocab[token[0]], self.tag_vocab[token[1]]))
-            sents.append(sent)
+            viterbi = []
 
-        return sents
-    
+            # Initliaize 
+            initial = {} 
+            for tag in self.tags:
+                initial[tag] = self.transitions.prob(('START',tag)) * self.emissions[tag].prob(sentence[0][0])
+            viterbi.append(initial)
+
+            # for i = 1, ..., n
+            for i in range(1, len(sentence)):
+                token = sentence[i][0]
+                probs = {}
+
+                for tag in self.tags:
+                    probs[tag] = max([viterbi[i - 1][prev_tag] * self.transitions.prob((prev_tag,tag)) * self.emissions[tag].prob(token) for prev_tag in self.tags])
+
+                viterbi.append(probs)
+        
+            final = {}
+            for tag in self.tags:
+                final[tag] = max([viterbi[len(sentences) - 2][prev_tag] * self.transitions.prob((prev_tag,tag)) for prev_tag in self.tags])
+
+            sen_result = []
+
+            for 
+
+            return viterbi
+
+        return None
+
 
 
 def main():
-    tagger = EagerTagger('en')
-    tagged_sentences = tagger.convert(tagger.tag())
-    for sentence in tagged_sentences:
-        for token in sentence:
-            print(token[0], token[1])
-        print()
+    tagger = Tagger('en')
+    # )tagged_sentences = tagger.eager_tag()
+    # for sentence in tagged_sentences:
+    #     for token in sentence:
+    #         print(token[0], token[1])
+    #     print(
+    result = tagger.viterbi_tag()
 
     
     
