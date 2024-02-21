@@ -22,7 +22,7 @@ class Bijection():
     def __init__(self, elems):
         self.to_id = {}
         self.to_text = {}
-        self.index = 1
+        self.index = 0
 
         self.setup(elems)
 
@@ -37,7 +37,7 @@ class Bijection():
             try:
                 return self.to_text[key]
             except KeyError:
-                return 0
+                return -1
         else:
             try:
                 return self.to_id[key]
@@ -139,6 +139,7 @@ class Tagger():
     
         return distribution
     
+    
     def init_smoothed_transition_dist(self, sentences):
         '''
             Calculates smoothed distribution of transition probabilities P( tag[i] | tag[i-1] )
@@ -160,17 +161,17 @@ class Tagger():
 
     def eager_tag(self):
         start = time.time()
-        sentences=self.test_sents[0:10]
+        sentences=self.test_sents
         result = [] # will contain list of sentences, tagged using eager algorithm
 
         for sentence in sentences:
             pred_sent = [sentence[0]] # initialize with start-of-sentence
-            prev_tag=0
+            prev_tag='START'
             for token in sentence[1:]:
                 word = token[0] # the word to predict tag for 
 
                 # list of all possible (tag, emission_prob * transistion_prob) for the given word
-                probs = [(tag, self.emissions[tag].prob(word) * self.transitions.prob((prev_tag, tag))) for tag in self.tags]
+                probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags]
 
                 # tag with highest probability 
                 max_prob_tag = max(probs, key=lambda obj:obj[1])[0]
@@ -178,16 +179,17 @@ class Tagger():
                 pred_sent.append((word,max_prob_tag))
                 prev_tag = max_prob_tag
                 # NOTE : we are leaving out end-of-sentence marker
+            pred_sent.append(sentence[-1])
             result.append(pred_sent)
 
         end = time.time()
-        print(end - start)
+        # print(end - start)
 
         return result
         
 
     def viterbi_tag(self):
-        sentences=self.test_sents[0:5]
+        sentences=self.test_sents
 
         result = []
          
@@ -197,7 +199,7 @@ class Tagger():
             # Initliaize 
             initial = {} 
             for tag in self.tags:
-                initial[tag] = self.transitions.prob(('START',tag)) * self.emissions[tag].prob(sentence[0][0])
+                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[0][0])
             viterbi.append(initial)
 
             i = 1
@@ -206,46 +208,60 @@ class Tagger():
                 probs = {}
 
                 for tag in self.tags:
-                    probs[tag] = max([viterbi[i - 1][prev_tag] * self.transitions.prob((prev_tag,tag)) * self.emissions[tag].prob(token) for prev_tag in self.tags])
+                    probs[tag] = max([viterbi[i - 1][prev_tag] + self.transitions.logprob((prev_tag,tag)) + self.emissions[tag].logprob(token) for prev_tag in self.tags])
 
                 viterbi.append(probs)
                 i += 1
         
             final = {}
-            for tag in self.tags:
-                final[tag] = max([viterbi[i-1][prev_tag] * self.transitions.prob((prev_tag,tag)) for prev_tag in self.tags])
 
+            for tag in self.tags:
+                final[tag] = viterbi[i-1][tag] + self.transitions.logprob((tag,'END'))
             viterbi.append(final)
 
             sen_result = []
 
-            for i in range(0, len(sentence)):
+            sen_result.append(("<s>", "START"))
+            for i in range(1, len(sentence)-1):
                 v_col = viterbi[i]
                 word = sentence[i][0]
                 max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
                 
                 sen_result.append((word, max_tag))
 
+            sen_result.append(('</s>', 'END'))
             result.append(sen_result)
-
 
         return result
 
+    def calc_accuracy(self, predictions):
+        num_correct = 0.0
+        total = 0.0
 
+        for i in range(0, len(self.test_sents)):
+            pred_sent = predictions[i]
+            label_sent = self.test_sents[i]
+
+            for j in range(0, len(label_sent)):
+                pred_tag = pred_sent[j][1]
+                label_tag = label_sent[j][1]
+
+                if pred_tag == label_tag:
+                    num_correct += 1.0
+
+                total += 1.0
+        return num_correct/total
 
 def main():
-    tagger = Tagger('en')
-    # )tagged_sentences = tagger.eager_tag()
-    # for sentence in tagged_sentences:
-    #     for token in sentence:
-    #         print(token[0], token[1])
-    #     print(
+    tagger = Tagger('ko')
+
     result = tagger.viterbi_tag()
+    
+    print('Viterbi :', tagger.calc_accuracy(result))
 
-    for sent in result:
-        for token in sent:
-            print(token)
+    result = tagger.eager_tag()
 
+    print('Eager :', tagger.calc_accuracy(result))
     
     
 if __name__ == '__main__':

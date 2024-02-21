@@ -9,7 +9,7 @@ for tag in tags:
     smoothed[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
 print('smoothed probability of N -> apple is', (smoothed['N'].logprob('apple')))
 print('smoothed probability of N -> banana is', smoothed['N'].logprob('banana'))
-print('smoothed probability of N -> peach is', smoothed['N'].prob('peach'))
+print('smoothed probability of N -> peach is', log(smoothed['N'].prob('peach')))
 print('smoothed probability of V -> sing is', smoothed['V'].prob('sing'))
 print('smoothed probability of V -> walk is', smoothed['V'].prob('walk'))
 
