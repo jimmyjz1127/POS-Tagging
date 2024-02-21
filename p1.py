@@ -133,8 +133,9 @@ class Tagger():
 
         for tag in tags:
             words = [w for sentence in sentences for (w, t) in sentence if t == tag]
+            # prob_dist = WittenBellProbDist(FreqDist(words), bins=1e5)
+            # distribution[tag] = {word : prob_dist.logprob(word) for word in set(words)}
             distribution[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
-
     
         return distribution
     
@@ -186,7 +187,7 @@ class Tagger():
         
 
     def viterbi_tag(self):
-        sentences=self.test_sents[0:10]
+        sentences=self.test_sents[0:5]
 
         result = []
          
@@ -199,8 +200,8 @@ class Tagger():
                 initial[tag] = self.transitions.prob(('START',tag)) * self.emissions[tag].prob(sentence[0][0])
             viterbi.append(initial)
 
-            # for i = 1, ..., n
-            for i in range(1, len(sentence)):
+            i = 1
+            while (i < len(sentence) - 1):
                 token = sentence[i][0]
                 probs = {}
 
@@ -208,18 +209,27 @@ class Tagger():
                     probs[tag] = max([viterbi[i - 1][prev_tag] * self.transitions.prob((prev_tag,tag)) * self.emissions[tag].prob(token) for prev_tag in self.tags])
 
                 viterbi.append(probs)
+                i += 1
         
             final = {}
             for tag in self.tags:
-                final[tag] = max([viterbi[len(sentences) - 2][prev_tag] * self.transitions.prob((prev_tag,tag)) for prev_tag in self.tags])
+                final[tag] = max([viterbi[i-1][prev_tag] * self.transitions.prob((prev_tag,tag)) for prev_tag in self.tags])
+
+            viterbi.append(final)
 
             sen_result = []
 
-            for 
+            for i in range(0, len(sentence)):
+                v_col = viterbi[i]
+                word = sentence[i][0]
+                max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
+                
+                sen_result.append((word, max_tag))
 
-            return viterbi
+            result.append(sen_result)
 
-        return None
+
+        return result
 
 
 
@@ -231,6 +241,10 @@ def main():
     #         print(token[0], token[1])
     #     print(
     result = tagger.viterbi_tag()
+
+    for sent in result:
+        for token in sent:
+            print(token)
 
     
     
