@@ -113,7 +113,7 @@ class Tagger():
             sent = [('<s>', 'START')]
 
             for token in sentence:
-                sent.append((token['form'], token['upos']))
+                sent.append((token['form'].lower(), token['upos']))
 
             sent.append(('</s>', 'END'))
             sents.append(sent)
@@ -192,17 +192,18 @@ class Tagger():
         result = []
          
         for sentence in sentences:
+            sentence = sentence[1:-1]
             viterbi = []
 
             # Initliaize 
             initial = {} 
             for tag in self.tags:
-                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[1][0])
+                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[0][0])
             viterbi.append(initial)
 
             # Intermediary
             i = 1
-            while (i < len(sentence) - 1):
+            while (i < len(sentence)):
                 token = sentence[i][0]
                 probs = {}
 
@@ -220,7 +221,7 @@ class Tagger():
             # Backtrack
             sen_result = []
             sen_result.append(("<s>", "START"))
-            for i in range(1, len(sentence)-1):
+            for i in range(0, len(sentence)):
                 v_col = viterbi[i]
                 word = sentence[i][0]
                 max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
@@ -252,7 +253,7 @@ class Tagger():
             backward.append(initial_b)
 
             # INTERMEDIARY 
-            i = 1 
+            i = 1
             while (i < len(sentence) - 1):
                 j = len(sentence) - i
                 token_f = sentence[i][0]
@@ -332,19 +333,20 @@ class Tagger():
         return num_correct/total
 
 def main():
-    # tagger = Tagger('en')
+    tagger = Tagger('en')
 
     # result = tagger.eager_tag()
 
     # print('Eager :', tagger.calc_accuracy(result))
 
-    # result = tagger.viterbi_tag()
+    result = tagger.viterbi_tag()
     
-    # print('Viterbi :', tagger.calc_accuracy(result))
+    print('Viterbi :', tagger.calc_accuracy(result))
 
-    # result = tagger.forward_backward_tag()
+    result = tagger.forward_backward_tag()
 
-    # print('F-B :', tagger.calc_accuracy(result))
+    print('F-B :', tagger.calc_accuracy(result))
+
     
     
 if __name__ == '__main__':
