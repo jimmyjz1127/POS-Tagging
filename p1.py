@@ -98,78 +98,58 @@ class Tagger():
 
         return transition_trellis
 
-    def eager_tag(self):
-        start = time.time()
-        sentences=self.test_sents
-        result = [] # will contain list of sentences, tagged using eager algorithm
+    def eager_tag(self, sentence):
+        pred_sent = [sentence[0]] # initialize with start-of-sentence
+        prev_tag='START'
+        for token in sentence[1:]:
+            word = token[0] # the word to predict tag for 
 
-        for sentence in sentences:
-            pred_sent = [sentence[0]] # initialize with start-of-sentence
-            prev_tag='START'
-            for token in sentence[1:]:
-                word = token[0] # the word to predict tag for 
+            # list of all possible (tag, emission_prob * transistion_prob) for the given word
+            probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags]
 
-                # list of all possible (tag, emission_prob * transistion_prob) for the given word
-                probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags]
+            # tag with highest probability 
+            max_prob_tag = max(probs, key=lambda obj:obj[1])[0]
 
-                # tag with highest probability 
-                max_prob_tag = max(probs, key=lambda obj:obj[1])[0]
+            pred_sent.append((word,max_prob_tag))
+            prev_tag = max_prob_tag
+            # NOTE : we are leaving out end-of-sentence marker
+        pred_sent.append(sentence[-1])
 
-                pred_sent.append((word,max_prob_tag))
-                prev_tag = max_prob_tag
-                # NOTE : we are leaving out end-of-sentence marker
-            pred_sent.append(sentence[-1])
-            result.append(pred_sent)
-
-        end = time.time()
-        # print(end - start)
-
-        return result
+        return pred_sent
         
 
-    def viterbi_tag(self):
-        sentences=self.test_sents
+    def viterbi_tag(self, sentence):
+        viterbi = []
 
-        result = []
-         
-        for sentence in sentences:
-            viterbi = []
+        # Initliaize "viterbi[q,1] for all q"
+        initial = {} 
+        for tag in self.tags:
+            initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[1][0])
+        viterbi.append(initial)
 
-            # Initliaize "viterbi[q,1] for all q"
-            initial = {} 
+        # Intermediary "viterbi[q,i] for i=2,...,n"
+        for i in range(2, len(sentence)):
+            token = sentence[i][0]
+            probs = {}
+
             for tag in self.tags:
-                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[1][0])
-            viterbi.append(initial)
+                probs[tag] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,tag)) + self.emissions[tag].logprob(token) for prev_tag in self.tags])
+            viterbi.append(probs)
+        
+        # Finish "viterbi[qf, n+1]"
+        final = {}
+        final['END'] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,'END')) for prev_tag in self.tags])
+        viterbi.append(final)
 
-            # Intermediary "viterbi[q,i] for i=2,...,n"
-            for i in range(2, len(sentence)):
-                token = sentence[i][0]
-                probs = {}
-
-                for tag in self.tags:
-                    probs[tag] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,tag)) + self.emissions[tag].logprob(token) for prev_tag in self.tags])
-
-                viterbi.append(probs)
-            
-            # Finish "viterbi[qf, n+1]"
-            final = {}
-            final['END'] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,'END')) for prev_tag in self.tags])
-            viterbi.append(final)
-
-            # Backtrack
-            sen_result = []
-            sen_result.append(("<s>", "START"))
-            for i in range(1, len(sentence) - 1):
-                v_col = viterbi[i - 1]
-                word = sentence[i][0]
-                max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
-                
-                sen_result.append((word, max_tag))
-
-            sen_result.append(('</s>', 'END'))
-            result.append(sen_result)
-
-        return result
+        # Backtrack
+        pred_sent = [("<s>", "START")]
+        for i in range(1, len(sentence) - 1):
+            v_col = viterbi[i - 1]
+            max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
+            pred_sent.append((sentence[i][0], max_tag))
+        pred_sent.append(('</s>', 'END'))
+    
+        return pred_sent
     
     def forward_backward_tag(self, sentence):
         forward = []
@@ -177,8 +157,8 @@ class Tagger():
 
         # INITIAL 
         # forward[q,1] for all q
-        # backward
-        initial_f = {} 
+        # backward[q,n] for all q
+        initial_f = {}
         initial_b = {}
         
         for tag in self.tags:
@@ -188,17 +168,17 @@ class Tagger():
         backward.append(initial_b)
 
         # INTERMEDIARY 
+        # forward[q,i] for i = 2,...,n and all q
+        # backward[q,i] for i = n-1,...,1 and all q
         for i in range(2, len(sentence) - 1):
-            j = len(sentence) - i 
-            token_f = sentence[i][0]
-            token_b = sentence[j][0]
             intermed_f = {}
             intermed_b = {}
+            token_f = sentence[i][0]
+            token_b = sentence[len(sentence) - i][0]
 
             for tag in self.tags:
                 inner_f = [forward[-1][prev_tag] + self.transitions.logprob((prev_tag, tag)) + self.emissions[tag].logprob(token_f) for prev_tag in self.tags]
                 inner_b = [backward[-1][next_tag] + self.transitions.logprob((tag, next_tag)) + self.emissions[next_tag].logprob(token_b) for next_tag in self.tags]
-
                 intermed_f[tag] = self.logsumexp(inner_f)
                 intermed_b[tag] = self.logsumexp(inner_b)
 
@@ -206,6 +186,8 @@ class Tagger():
             backward.append(intermed_b)
 
         # FINAL
+        # forward[qf, n+1] 
+        # backward[q0, 0]
         final_f = {}
         final_b = {}
         final_f['END'] = self.logsumexp([forward[-1][prev_tag] + self.transitions.logprob((prev_tag, 'END')) for prev_tag in self.tags])
@@ -213,34 +195,43 @@ class Tagger():
         forward.append(final_f)
         backward.append(final_b)
 
-        backward.reverse() # reverse backwards matrix to align with forward matrix 
+        # reverse backwards matrix to align with forward matrix 
+        backward.reverse() 
 
+        # cut off columns for start and end of sentence markers 
         backward = backward[1:]
-        forward = forward[:-1]
+        forward = forward[:-1]  
 
-        #Back Track
-        sen_result = []
-        sen_result.append(("<s>", "START"))
+        #BACK TRACK
+        pred_sent = [("<s>", "START")]
         for i in range(0, len(sentence) - 2):
-            word = sentence[i + 1][0]
             f_col = forward[i]
             b_col = backward[i]
             combined = self.combine_dicts(f_col, b_col)
             max_tag = max(combined.items(), key = lambda obj:obj[1])[0]
-            sen_result.append((word, max_tag))
-        sen_result.append(("</s>", "END"))
+            pred_sent.append((sentence[i + 1][0], max_tag))
+        pred_sent.append(("</s>", "END"))
                 
-        return sen_result
+        return pred_sent
 
-    def run_bf(self):
+    def run(self, algo):
         sentences = self.test_sents
         result = []
-
-        for sentence in sentences:
-            result.append(self.forward_backward_tag(sentence))
-
-        return result
-
+    
+        if algo == 1:
+            for sentence in sentences:
+                result.append(self.eager_tag(sentence))
+            return result
+        elif algo == 2:
+            for sentence in sentences:
+                result.append(self.viterbi_tag(sentence))
+            return result
+        elif algo == 3:
+            for sentence in sentences:
+                result.append(self.forward_backward_tag(sentence))
+            return result
+        else :
+            return None
 
 
     def combine_dicts(self, dict1, dict2):
@@ -280,15 +271,15 @@ class Tagger():
 def main():
     tagger = Tagger('ko')
 
-    result = tagger.eager_tag()
+    result = tagger.run(1)
 
     print('Eager :', tagger.calc_accuracy(result))
 
-    result = tagger.viterbi_tag()
+    result = tagger.run(2)
     
     print('Viterbi :', tagger.calc_accuracy(result))
 
-    result = tagger.run_bf()
+    result = tagger.run(3)
 
     print('F-B :', tagger.calc_accuracy(result))
 
