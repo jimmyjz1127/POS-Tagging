@@ -133,8 +133,6 @@ class Tagger():
 
         for tag in tags:
             words = [w for sentence in sentences for (w, t) in sentence if t == tag]
-            # prob_dist = WittenBellProbDist(FreqDist(words), bins=1e5)
-            # distribution[tag] = {word : prob_dist.logprob(word) for word in set(words)}
             distribution[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
     
         return distribution
@@ -199,7 +197,7 @@ class Tagger():
             # Initliaize 
             initial = {} 
             for tag in self.tags:
-                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[0][0])
+                initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[1][0])
             viterbi.append(initial)
 
             # Intermediary
@@ -213,16 +211,14 @@ class Tagger():
 
                 viterbi.append(probs)
                 i += 1
-        
-            final = {}
-
+            
             # Finish
-            for tag in self.tags:
-                final[tag] = viterbi[i-1][tag] + self.transitions.logprob((tag,'END'))
+            final = {}
+            final['END'] = max([viterbi[i-1][prev_tag] + self.transitions.logprob((prev_tag,'END')) for prev_tag in self.tags])
             viterbi.append(final)
 
+            # Backtrack
             sen_result = []
-
             sen_result.append(("<s>", "START"))
             for i in range(1, len(sentence)-1):
                 v_col = viterbi[i]
@@ -236,7 +232,7 @@ class Tagger():
 
         return result
     
-    def welch_baum_tag(self):
+    def forward_backward_tag(self):
         sentences=self.test_sents
 
         result = []
@@ -283,7 +279,7 @@ class Tagger():
             forward.append(final_f)
             backward.append(final_b)
 
-            backward.reverse()
+            backward.reverse() # reverse backwards matrix to align with forward matrix 
 
             #Back Track
             sen_result = []
@@ -293,9 +289,7 @@ class Tagger():
                 f_col = forward[i]
                 b_col = backward[i]
                 combined = self.combine_dicts(f_col, b_col)
-
                 max_tag = max(combined.items(), key = lambda obj:obj[1])[0]
-
                 sen_result.append((word, max_tag))
             sen_result.append(("</s>", "END"))
                 
@@ -338,19 +332,19 @@ class Tagger():
         return num_correct/total
 
 def main():
-    tagger = Tagger('en')
-
-    # result = tagger.viterbi_tag()
-    
-    # print('Viterbi :', tagger.calc_accuracy(result))
+    # tagger = Tagger('en')
 
     # result = tagger.eager_tag()
 
     # print('Eager :', tagger.calc_accuracy(result))
 
-    result = tagger.welch_baum_tag()
+    # result = tagger.viterbi_tag()
+    
+    # print('Viterbi :', tagger.calc_accuracy(result))
 
-    print('F-B :', tagger.calc_accuracy(result))
+    # result = tagger.forward_backward_tag()
+
+    # print('F-B :', tagger.calc_accuracy(result))
     
     
 if __name__ == '__main__':
