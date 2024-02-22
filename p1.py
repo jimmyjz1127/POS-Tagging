@@ -62,14 +62,16 @@ class Tagger():
         return sents
 
     def init_smoothed_emission_dist(self, sentences, tags):
-        '''
+        """
             Calculates smoothed distribution of emission probabilities P(word | tag)
 
             Arguments:
                 sentences : list of sentences [[(word, tag)]]
 
+
             Returns : emission probability distribution (with Witten-Bell smoothing)
-        '''
+        """
+
         distribution = {}
 
         for tag in tags:
@@ -83,10 +85,8 @@ class Tagger():
         '''
             Calculates smoothed distribution of transition probabilities P( tag[i] | tag[i-1] )
 
-            Arguments:
-                sentences : list of sentences [[(word, tag)]]
-
-            Returns : transition probability trellis (with witten-bell smoothing)
+            @param sentences : list of sentences [[(word, tag)]]
+            @return : transition probability trellis (with witten-bell smoothing)
         '''
         bigrams = [] 
 
@@ -99,6 +99,13 @@ class Tagger():
         return transition_trellis
 
     def eager_tag(self, sentence):
+        """ 
+            Tags a sentence using eager algorithm
+
+            @param sentence : sentence to tag in form of [(word, tag)]
+            @returns : a new sentence list with predicted tags [(word, predicted tag)]
+        """
+
         pred_sent = [sentence[0]] # initialize with start-of-sentence
         prev_tag='START'
         for token in sentence[1:]:
@@ -119,6 +126,12 @@ class Tagger():
         
 
     def viterbi_tag(self, sentence):
+        """
+            Tags a sentence using the viterbi algorithm 
+
+            @param sentence : the sentence to tag in form [(word, tag)]
+            @return : a new sentence list with predicted tags [(word, predicted tag)]
+        """
         viterbi = []
 
         # Initliaize "viterbi[q,1] for all q"
@@ -152,6 +165,12 @@ class Tagger():
         return pred_sent
     
     def forward_backward_tag(self, sentence):
+        """
+            Tags a sentence using the "individually most probable tag" method 
+
+            @param sentence : the sentence to tag of form [(word, tag)] 
+            @return : a new sentence list with predicted tags [(word, predicted tag)]
+        """
         forward = []
         backward = []
 
@@ -215,6 +234,17 @@ class Tagger():
         return pred_sent
 
     def run(self, algo):
+        """
+            For applying an HMM tagging algorithm to all sentences of a the test corpus 
+
+            @param algo : integer specifying which algorithm to use 
+                1 : eager algorithm
+                2 : viterbi algorithm
+                3 : forward-back (individually most probable tag) algorithm
+
+            @returns : the new list of sentences with predicted tags 
+        """
+
         sentences = self.test_sents
         result = []
     
@@ -235,13 +265,27 @@ class Tagger():
 
 
     def combine_dicts(self, dict1, dict2):
+        """
+            For combining the values of two dictionaries into a single dictionary 
+            (for combining forward and backward tables of forward-backward algorithm)
+
+            @param dict1 : dictionary {String : Double}
+            @param dict2 : dictionary {String : Double}
+            @returns : combined dictionary {String : Double}
+        """
         result = {}
         for key in dict1.keys():
             result[key] = dict1[key] + dict2[key]
         return result
 
-    # Adding a list of probabilities represented as log probabilities.
+
     def logsumexp(self, vals):
+        """
+            For summing a list of log probabilities 
+
+            @param vals : list of log probabilities [double]
+            @returns : the log sum (double)
+        """
         if len(vals) == 0:
             return self.min_log_prob
         m = max(vals)
@@ -251,6 +295,13 @@ class Tagger():
             return m + log(sum([exp(val - m) for val in vals]))
 
     def calc_accuracy(self, predictions):
+        """
+            Calculates the accuracy of an algorithm by comparing its predicted tags against actual tags 
+
+            @param predictions : the sentences with predicted tags of form [[(word, tag)]]
+            @returns : double representing (# of correct tags)/total
+        """
+
         num_correct = 0.0
         total = 0.0
 
@@ -269,7 +320,7 @@ class Tagger():
         return num_correct/total
 
 def main():
-    tagger = Tagger('ko')
+    tagger = Tagger('en')
 
     result = tagger.run(1)
 
