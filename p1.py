@@ -12,6 +12,7 @@ from nltk.util import ngrams
 from sys import float_info
 from math import log, exp
 import time 
+import pandas as pd 
 
 
 class Tagger():
@@ -27,7 +28,7 @@ class Tagger():
         self.test_sents =  self.preprocess_sentences(self.test_sents)
 
         # get set of all unique tags 
-        self.tags = set([ tag for sentence in self.train_sents for ( _, tag) in sentence])
+        self.tags = list(set([ tag for sentence in self.train_sents for ( _, tag) in sentence]))
         self.tags_no_start = {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'END', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
         self.tags_no_end =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'START', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
         self.tags_none =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
@@ -72,14 +73,9 @@ class Tagger():
 
         distribution = {}
 
-        # for tag in tags:
-        #     words = [w for sentence in sentences for (w, t) in sentence if t == tag]
-        #     distribution[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
-
         for tag in self.tags_none:
             words = [w for sentence in sentences for (w, t) in sentence if t == tag]
             distribution[tag] = WittenBellProbDist(FreqDist(words), bins=1e5)
-
 
         return distribution
     
@@ -96,11 +92,19 @@ class Tagger():
         for sentence in sentences:
             tags = [obj[1] for obj in sentence]
             bigrams += ngrams(tags, 2)
- 
-        transition_trellis = WittenBellProbDist(FreqDist(bigrams), bins=1e5)
 
-        return transition_trellis
+        # transition_trellis = WittenBellProbDist(FreqDist(bigrams), bins=1e5)
+        # return transition_trellis
 
+        distribution = {}
+
+        for tag in self.tags:
+            succeeding_tags = [tag2 for tag1,tag2 in bigrams if tag1 == tag]
+            distribution[tag] = WittenBellProbDist(FreqDist(succeeding_tags), bins=1e5) 
+
+        return distribution
+
+        
 
     def eager_tag(self, sentence):
         """ 
@@ -116,7 +120,8 @@ class Tagger():
             word = token[0] # the word to predict tag for 
 
             # list of all possible (tag, emission_prob * transistion_prob) for the given word
-            probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags_none]
+            # probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags_none]
+            probs = [(tag, self.emissions[tag].logprob(word) + self.transitions[prev_tag].logprob(tag)) for tag in self.tags_none]
 
             # tag with highest probability 
             max_prob_tag = max(probs, key=lambda obj:obj[1])[0]
@@ -127,8 +132,7 @@ class Tagger():
         pred_sent.append(sentence[-1])
 
         return pred_sent
-        
-
+    
     def viterbi_tag(self, sentence):
         """
             Tags a sentence using the viterbi algorithm 
@@ -136,37 +140,56 @@ class Tagger():
             @param sentence : the sentence to tag in form [(word, tag)]
             @return : a new sentence list with predicted tags [(word, predicted tag)]
         """
+       
         viterbi = []
+        backpointer = []
 
-        # Initliaize "viterbi[q,1] for all q"
-        initial = {} 
+        # Initialize "viterbi[q,1] for all q"
+        initial = {}
+        backpointer_initial = {}
         for tag in self.tags_none:
-            initial[tag] = self.transitions.logprob(('START',tag)) + self.emissions[tag].logprob(sentence[1][0])
+            initial[tag] = self.transitions["START"].logprob(tag) + self.emissions[tag].logprob(sentence[1][0])
+            backpointer_initial[tag] = 'START'
         viterbi.append(initial)
+        backpointer.append(backpointer_initial)
 
         # Intermediary "viterbi[q,i] for i=2,...,n"
         for i in range(2, len(sentence)):
             token = sentence[i][0]
             probs = {}
+            backpointers = {}
 
             for tag in self.tags_none:
-                probs[tag] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,tag)) + self.emissions[tag].logprob(token) for prev_tag in self.tags_none])
+                max_prob, best_prev_tag = max(
+                    [(viterbi[-1][prev_tag] +  self.transitions[prev_tag].logprob(tag) + self.emissions[tag].logprob(token), prev_tag) for prev_tag in self.tags_none],
+                    key=lambda x: x[0]
+                )
+                probs[tag] = max_prob
+                backpointers[tag] = best_prev_tag
+
             viterbi.append(probs)
-        
+            backpointer.append(backpointers)
+
         # Finish "viterbi[qf, n+1]"
-        final = {}
-        final['END'] = max([viterbi[-1][prev_tag] + self.transitions.logprob((prev_tag,'END')) for prev_tag in self.tags_none])
-        viterbi.append(final)
+        final_probs, final_tag = max([(viterbi[-1][tag] +  self.transitions[tag].logprob('END'), tag) for tag in self.tags_none], key=lambda x: x[0])
+
 
         # Backtrack
-        pred_sent = [("<s>", "START")]
-        for i in range(1, len(sentence) - 1):
-            v_col = viterbi[i - 1]
-            max_tag = max(v_col.items(), key=lambda obj:obj[1])[0]
-            pred_sent.append((sentence[i][0], max_tag))
-        pred_sent.append(('</s>', 'END'))
+        pred_tags = ['END']
+        current_tag = final_tag
+        for i in range(len(sentence) - 2, 0, -1):
+            current_tag = backpointer[i][current_tag]
+            pred_tags.insert(0, current_tag)
+        pred_tags.insert(0, 'START')
+
+        # Pair words with predicted tags, excluding START and END
+        pred_sent = [(sentence[i][0], pred_tags[i]) for i in range(len(sentence))]
 
         return pred_sent
+
+        
+
+    
     
     def forward_backward_tag(self, sentence):
         """
@@ -185,8 +208,8 @@ class Tagger():
         initial_b = {}
         
         for tag in self.tags_none:
-            initial_f[tag] = self.transitions.logprob(('START', tag)) + self.emissions[tag].logprob(sentence[1][0])
-            initial_b[tag] = self.transitions.logprob((tag, 'END'))
+            initial_f[tag] = self.transitions['START'].logprob(tag) + self.emissions[tag].logprob(sentence[1][0])
+            initial_b[tag] = self.transitions[tag].logprob('END')
         forward.append(initial_f)
         backward.append(initial_b)
 
@@ -200,8 +223,8 @@ class Tagger():
             token_b = sentence[len(sentence) - i][0]
 
             for tag in self.tags_none:
-                inner_f = [forward[-1][prev_tag] + self.transitions.logprob((prev_tag, tag)) + self.emissions[tag].logprob(token_f) for prev_tag in self.tags_none]
-                inner_b = [backward[-1][next_tag] + self.transitions.logprob((tag, next_tag)) + self.emissions[next_tag].logprob(token_b) for next_tag in self.tags_none]
+                inner_f = [forward[-1][prev_tag] + self.transitions[prev_tag].logprob(tag) + self.emissions[tag].logprob(token_f) for prev_tag in self.tags_none]
+                inner_b = [backward[-1][next_tag] + self.transitions[tag].logprob(next_tag) + self.emissions[next_tag].logprob(token_b) for next_tag in self.tags_none]
                 intermed_f[tag] = self.logsumexp(inner_f)
                 intermed_b[tag] = self.logsumexp(inner_b)
 
@@ -213,8 +236,8 @@ class Tagger():
         # backward[q0, 0]
         final_f = {}
         final_b = {}
-        final_f['END'] = self.logsumexp([forward[-1][prev_tag] + self.transitions.logprob((prev_tag, 'END')) for prev_tag in self.tags_none])
-        final_b['START'] = self.logsumexp([backward[-1][next_tag] + self.transitions.logprob(('START', next_tag)) + self.emissions[next_tag].logprob(sentence[1][0]) for next_tag in self.tags_none])
+        final_f['END'] = self.logsumexp([forward[-1][prev_tag] + self.transitions[prev_tag].logprob('END') for prev_tag in self.tags_none])
+        final_b['START'] = self.logsumexp([backward[-1][next_tag] + self.transitions['START'].logprob(next_tag) + self.emissions[next_tag].logprob(sentence[1][0]) for next_tag in self.tags_none])
         forward.append(final_f)
         backward.append(final_b)
 
@@ -225,7 +248,7 @@ class Tagger():
         backward = backward[1:]
         forward = forward[:-1]  
 
-        #BACK TRACK
+        #
         pred_sent = [("<s>", "START")]
         for i in range(0, len(sentence) - 2):
             f_col = forward[i]
@@ -319,7 +342,7 @@ class Tagger():
             pred_sent = predictions[i]
             label_sent = self.test_sents[i]
 
-            for j in range(0, len(label_sent)):
+            for j in range(0, len(pred_sent)):
                 pred_tag = pred_sent[j][1]
                 label_tag = label_sent[j][1]
 
@@ -329,6 +352,30 @@ class Tagger():
                 total += 1.0
         return num_correct/total
 
+    def calc_confusion_matrix(self, predictions):
+        freq_matrix = {key : 0 for key in self.tags}
+
+        freq_matrix = pd.DataFrame(freq_matrix, index=self.tags)
+
+
+        for i in range(0, len(self.test_sents)):
+            pred_sent = predictions[i]
+            label_sent = self.test_sents[i]
+
+            for j in range(0, len(label_sent)):
+                pred_tag = pred_sent[j][1]
+                label_tag = label_sent[j][1]
+
+                freq_matrix.loc[pred_tag, label_tag] += 1
+
+        freq_matrix.to_csv('confusion_matrix_data.csv')
+
+
+
+
+
+
+
     
 
 def main():
@@ -337,6 +384,7 @@ def main():
     result, duration = tagger.run(1)
     print('Eager :', tagger.calc_accuracy(result))
     print('Eager Time Elapsed :', duration, 'ms')
+    # tagger.calc_confusion_matrix(result)
 
     print('====================================\n')
 
@@ -349,6 +397,8 @@ def main():
     result, duration = tagger.run(3)
     print('IMPT:', tagger.calc_accuracy(result))
     print('Individual Most Probable Tag Time Elapsed :', duration, 'ms')
+
+
 
     # sentence = [('<s>', 'START'), ('these', 'DET'), ('series', 'NOUN'), ('are', 'AUX'), ('represented', 'VERB'), ('by', 'ADP'), ('colored', 'ADJ'), ('data', 'NOUN'), ('markers', 'NOUN'), (',', 'PUNCT'), ('and', 'CCONJ'), ('their', 'PRON'), ('names', 'NOUN'), ('appear', 'VERB'), ('in', 'ADP'), ('the', 'DET'), ('chart', 'NOUN'), ('legend', 'NOUN'), ('.', 'PUNCT'), ('</s>', 'END')]
 
