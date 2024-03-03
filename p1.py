@@ -27,11 +27,12 @@ class Tagger():
         self.train_sents = self.preprocess_sentences(self.train_sents)
         self.test_sents =  self.preprocess_sentences(self.test_sents)
 
-        # get set of all unique tags 
-        self.tags = list(set([ tag for sentence in self.train_sents for ( _, tag) in sentence]))
-        self.tags_no_start = {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'END', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
-        self.tags_no_end =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'START', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
+        # hard code list of tags in case of sparse corpus 
+        self.tags =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON', 'START', 'END'}
+        
+        # All tags excluding start of sentence and end of sentence tags
         self.tags_none =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
+        
         self.words = set([w for sentence in self.train_sents for (w,_) in sentence])
 
         # get smoothed emission and transisions (bigram)
@@ -93,16 +94,14 @@ class Tagger():
             tags = [obj[1] for obj in sentence]
             bigrams += ngrams(tags, 2)
 
-        # transition_trellis = WittenBellProbDist(FreqDist(bigrams), bins=1e5)
-        # return transition_trellis
-
         distribution = {}
 
         for tag in self.tags:
-            succeeding_tags = [tag2 for tag1,tag2 in bigrams if tag1 == tag]
+            succeeding_tags = [tag2 for tag1,tag2 in bigrams if tag1 == tag and tag2 != 'START' and tag1 != 'END']
             distribution[tag] = WittenBellProbDist(FreqDist(succeeding_tags), bins=1e5) 
 
-        return distribution
+        return distribution 
+
 
         
 
@@ -171,7 +170,7 @@ class Tagger():
             backpointer.append(backpointers)
 
         # Finish "viterbi[qf, n+1]"
-        final_probs, final_tag = max([(viterbi[-1][tag] +  self.transitions[tag].logprob('END'), tag) for tag in self.tags_none], key=lambda x: x[0])
+        _, final_tag = max([(viterbi[-1][tag] +  self.transitions[tag].logprob('END'), tag) for tag in self.tags_none], key=lambda x: x[0])
 
 
         # Backtrack
@@ -187,13 +186,10 @@ class Tagger():
 
         return pred_sent
 
-        
-
     
-    
-    def forward_backward_tag(self, sentence):
+    def IMPT(self, sentence):
         """
-            Tags a sentence using the "individually most probable tag" method 
+            Tags a sentence using the "Individually Most Probable Tag" method 
 
             @param sentence : the sentence to tag of form [(word, tag)] 
             @return : a new sentence list with predicted tags [(word, predicted tag)]
@@ -248,7 +244,7 @@ class Tagger():
         backward = backward[1:]
         forward = forward[:-1]  
 
-        #
+        # Finish
         pred_sent = [("<s>", "START")]
         for i in range(0, len(sentence) - 2):
             f_col = forward[i]
@@ -290,7 +286,7 @@ class Tagger():
         elif algo == 3:
             start = time.time()
             for sentence in sentences:
-                result.append(self.forward_backward_tag(sentence))
+                result.append(self.IMPT(sentence))
             duration = time.time() - start
             return result, duration
         else :
@@ -402,7 +398,7 @@ def main():
 
     # sentence = [('<s>', 'START'), ('these', 'DET'), ('series', 'NOUN'), ('are', 'AUX'), ('represented', 'VERB'), ('by', 'ADP'), ('colored', 'ADJ'), ('data', 'NOUN'), ('markers', 'NOUN'), (',', 'PUNCT'), ('and', 'CCONJ'), ('their', 'PRON'), ('names', 'NOUN'), ('appear', 'VERB'), ('in', 'ADP'), ('the', 'DET'), ('chart', 'NOUN'), ('legend', 'NOUN'), ('.', 'PUNCT'), ('</s>', 'END')]
 
-    # result = tagger.forward_backward_tag(sentence)
+    # result = tagger.IMPT(sentence)
 
 
     
