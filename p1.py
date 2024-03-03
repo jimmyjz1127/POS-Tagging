@@ -1,4 +1,4 @@
-from nltk import FreqDist, WittenBellProbDist
+from nltk import FreqDist, WittenBellProbDist, LaplaceProbDist, KneserNeyProbDist
 import os
 import numpy as np 
 import pandas 
@@ -13,6 +13,8 @@ from sys import float_info
 from math import log, exp
 import time 
 import pandas as pd 
+import seaborn as sns
+import matplotlib.pyplot as plt 
 
 
 class Tagger():
@@ -28,10 +30,10 @@ class Tagger():
         self.test_sents =  self.preprocess_sentences(self.test_sents)
 
         # hard code list of tags in case of sparse corpus 
-        self.tags =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON', 'START', 'END'}
+        self.tags =  ['AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON', 'START', 'END']
         
         # All tags excluding start of sentence and end of sentence tags
-        self.tags_none =  {'AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON'}
+        self.tags_none =  ['AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON']
         
         self.words = set([w for sentence in self.train_sents for (w,_) in sentence])
 
@@ -256,6 +258,57 @@ class Tagger():
                 
         return pred_sent
 
+    def forward_tag(self, sentence):
+        """
+            Tags a sentence using the "Individually Most Probable Tag" method 
+
+            @param sentence : the sentence to tag of form [(word, tag)] 
+            @return : a new sentence list with predicted tags [(word, predicted tag)]
+        """
+        forward = []
+
+        # INITIAL 
+        # forward[q,1] for all q
+        # backward[q,n] for all q
+        initial_f = {}
+        initial_b = {}
+        
+        for tag in self.tags_none:
+            initial_f[tag] = self.transitions['START'].logprob(tag) + self.emissions[tag].logprob(sentence[1][0])
+        forward.append(initial_f)
+
+        # INTERMEDIARY 
+        # forward[q,i] for i = 2,...,n and all q
+        # backward[q,i] for i = n-1,...,1 and all q
+        for i in range(2, len(sentence) - 1):
+            intermed_f = {}
+            token_f = sentence[i][0]
+
+            for tag in self.tags_none:
+                inner_f = [forward[-1][prev_tag] + self.transitions[prev_tag].logprob(tag) + self.emissions[tag].logprob(token_f) for prev_tag in self.tags_none]
+                intermed_f[tag] = self.logsumexp(inner_f)
+
+            forward.append(intermed_f)
+
+        # FINAL
+        # forward[qf, n+1] 
+        # backward[q0, 0]
+        final_f = {}
+        final_f['END'] = self.logsumexp([forward[-1][prev_tag] + self.transitions[prev_tag].logprob('END') for prev_tag in self.tags_none])
+        forward.append(final_f)
+
+        forward = forward[:-1]  
+
+        # Finish
+        pred_sent = [("<s>", "START")]
+        for i in range(0, len(sentence) - 2):
+            f_col = forward[i]
+            max_tag = max(f_col.items(), key = lambda obj:obj[1])[0]
+            pred_sent.append((sentence[i + 1][0], max_tag))
+        pred_sent.append(("</s>", "END"))
+                
+        return pred_sent
+
     def run(self, algo):
         """
             For applying an HMM tagging algorithm to all sentences of a the test corpus 
@@ -348,11 +401,15 @@ class Tagger():
                 total += 1.0
         return num_correct/total
 
-    def calc_confusion_matrix(self, predictions):
-        freq_matrix = {key : 0 for key in self.tags}
+    def calc_confusion_matrix(self, predictions, title):
+        """
+            For generating confusion matrix data and heatmap 
 
-        freq_matrix = pd.DataFrame(freq_matrix, index=self.tags)
+            @param predicitons : the predicted tags for test corpus 
+            @param title : string title to display on visual
+        """
 
+        freq_matrix = pd.DataFrame(0, index=self.tags, columns=self.tags)
 
         for i in range(0, len(self.test_sents)):
             pred_sent = predictions[i]
@@ -364,46 +421,51 @@ class Tagger():
 
                 freq_matrix.loc[pred_tag, label_tag] += 1
 
-        freq_matrix.to_csv('confusion_matrix_data.csv')
-
-
-
-
-
+        sum_row = freq_matrix.sum(axis=1)
+        freq_matrix = freq_matrix.div(sum_row, axis=0)
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(freq_matrix, fmt='.2f', cmap='Reds', annot=True)
+        plt.title(f'{title} Confusion Matrix')
+        image_name = re.sub(r"\s", "", title)
+        plt.savefig(f'./Figures/{image_name}.png')
 
 
     
 
-def main():
-    tagger = Tagger('en')
+def main(flag, lang):
+    tagger = Tagger(lang)
 
     result, duration = tagger.run(1)
     print('Eager :', tagger.calc_accuracy(result))
     print('Eager Time Elapsed :', duration, 'ms')
-    # tagger.calc_confusion_matrix(result)
+    if (flag) : tagger.calc_confusion_matrix(result, 'Eager Algorithm')
 
     print('====================================\n')
 
     result, duration = tagger.run(2)
     print('Viterbi :', tagger.calc_accuracy(result))
     print('Viterbi Time Elapsed :', duration, 'ms')
+    if (flag) : tagger.calc_confusion_matrix(result, 'Viterbi Algorithm')
 
     print('====================================\n')
 
     result, duration = tagger.run(3)
     print('IMPT:', tagger.calc_accuracy(result))
     print('Individual Most Probable Tag Time Elapsed :', duration, 'ms')
-
-
-
-    # sentence = [('<s>', 'START'), ('these', 'DET'), ('series', 'NOUN'), ('are', 'AUX'), ('represented', 'VERB'), ('by', 'ADP'), ('colored', 'ADJ'), ('data', 'NOUN'), ('markers', 'NOUN'), (',', 'PUNCT'), ('and', 'CCONJ'), ('their', 'PRON'), ('names', 'NOUN'), ('appear', 'VERB'), ('in', 'ADP'), ('the', 'DET'), ('chart', 'NOUN'), ('legend', 'NOUN'), ('.', 'PUNCT'), ('</s>', 'END')]
-
-    # result = tagger.IMPT(sentence)
+    if (flag) : tagger.calc_confusion_matrix(result, 'Individual Most Probable Tag Algorithm')
 
 
     
     
 if __name__ == '__main__':
-    main()
+    flag = False
+    lang = 'en'
+    if (len(sys.argv) == 2):
+        if sys.argv[1] in ['en', 'ko', 'sv']:
+            lang = sys.argv[1]
+    if ("conf" in sys.argv):
+        flag = True
+
+    main(lang, flag)
 
     
