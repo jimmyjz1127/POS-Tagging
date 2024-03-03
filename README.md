@@ -5,7 +5,7 @@
 ### To Install Necessary Dependencies 
 pip install nltk pandas pyarrow seaborn matplotlib conllu 
 
-### Execution Instrucitons 
+### Execution Instructions 
 1. To execute all algorithms on english language :  
     python p1.py 
 2. To specify a language run algorithms on :  

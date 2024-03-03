@@ -21,7 +21,9 @@ class Tagger():
    
     def __init__(self, lang):
         self.min_log_prob = -float_info.max
+        self.lang = lang
 
+        # Import treebanks 
         self.train_sents = conllu_corpus(train_corpus(lang))
         self.test_sents = conllu_corpus(test_corpus(lang))
 
@@ -30,12 +32,10 @@ class Tagger():
         self.test_sents =  self.preprocess_sentences(self.test_sents)
 
         # hard code list of tags in case of sparse corpus 
-        self.tags =  ['AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON', 'START', 'END']
+        self.tags =  [ 'X', 'SYM', 'AUX', 'PROPN', 'DET', 'INTJ', 'NUM', 'PUNCT', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON', 'START', 'END']
         
         # All tags excluding start of sentence and end of sentence tags
         self.tags_none =  ['AUX', 'PROPN', 'SYM', 'DET', 'INTJ', 'NUM', 'PUNCT', 'X', 'CCONJ', 'SCONJ', 'ADV', 'ADP', 'ADJ', 'PART', 'NOUN', 'VERB', 'PRON']
-        
-        self.words = set([w for sentence in self.train_sents for (w,_) in sentence])
 
         # get smoothed emission and transisions (bigram)
         self.emissions = self.init_smoothed_emission_dist(self.train_sents, self.tags)
@@ -189,7 +189,7 @@ class Tagger():
         return pred_sent
 
     
-    def IMPT(self, sentence):
+    def IMPT_tag(self, sentence):
         """
             Tags a sentence using the "Individually Most Probable Tag" method 
 
@@ -339,7 +339,7 @@ class Tagger():
         elif algo == 3:
             start = time.time()
             for sentence in sentences:
-                result.append(self.IMPT(sentence))
+                result.append(self.IMPT_tag(sentence))
             duration = time.time() - start
             return result, duration
         else :
@@ -423,44 +423,51 @@ class Tagger():
 
         sum_row = freq_matrix.sum(axis=1)
         freq_matrix = freq_matrix.div(sum_row, axis=0)
+        
         plt.figure(figsize=(10, 8))
         sns.heatmap(freq_matrix, fmt='.2f', cmap='Reds', annot=True)
-        plt.title(f'{title} Confusion Matrix')
+        plt.title(f'{title} Confusion Matrix [{self.lang}]')
         image_name = re.sub(r"\s", "", title)
-        plt.savefig(f'./Figures/{image_name}.png')
+        plt.savefig(f'./Figures/{image_name}_{self.lang}.png')
 
 
-    
-
-def main(flag, lang):
+def main(lang, flag):
     tagger = Tagger(lang)
 
+    print('\n======================================\n')
+
+    # Run Eager Algorithm
     result, duration = tagger.run(1)
-    print('Eager :', tagger.calc_accuracy(result))
-    print('Eager Time Elapsed :', duration, 'ms')
+    print('EAGER Algorithm')
+    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Eager Algorithm')
 
-    print('====================================\n')
+    print('\n======================================\n')
 
+    # Run Viterbi Algorithm
     result, duration = tagger.run(2)
-    print('Viterbi :', tagger.calc_accuracy(result))
-    print('Viterbi Time Elapsed :', duration, 'ms')
+    print('VITERBI Algorithm')
+    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Viterbi Algorithm')
 
-    print('====================================\n')
+    print('\n======================================\n')
 
+    # Run Individual Most Probable Tag Algorithm
     result, duration = tagger.run(3)
-    print('IMPT:', tagger.calc_accuracy(result))
-    print('Individual Most Probable Tag Time Elapsed :', duration, 'ms')
+    print("IMPT Algorithm")
+    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Individual Most Probable Tag Algorithm')
 
-
+    print('\n======================================\n')
     
     
 if __name__ == '__main__':
     flag = False
     lang = 'en'
-    if (len(sys.argv) == 2):
+    if (len(sys.argv) >= 2):
         if sys.argv[1] in ['en', 'ko', 'sv']:
             lang = sys.argv[1]
     if ("conf" in sys.argv):
