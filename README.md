@@ -13,7 +13,7 @@ pip install nltk pandas pyarrow seaborn matplotlib conllu
 3. To generate confusion matrix :  
     python p1.py conf   
     OR  
-    python p1.py en conf 
+    python p1.py [en | sv | ko | ...] conf 
 
 
 ### Files & Directories 

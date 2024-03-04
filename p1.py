@@ -376,7 +376,7 @@ class Tagger():
         else:
             return m + log(sum([exp(val - m) for val in vals]))
 
-    def calc_accuracy(self, predictions):
+    def calc_accuracy(self, predictions, algType):
         """
             Calculates the accuracy of an algorithm by comparing its predicted tags against actual tags 
 
@@ -386,6 +386,10 @@ class Tagger():
 
         num_correct = 0.0
         total = 0.0
+
+        true_pos = {k:0 for k in self.tags}
+        false_pos = {k:0 for k in self.tags}
+        false_neg = {k:0 for k in self.tags}
 
         for i in range(0, len(self.test_sents)):
             pred_sent = predictions[i]
@@ -397,9 +401,29 @@ class Tagger():
 
                 if pred_tag == label_tag:
                     num_correct += 1.0
+                    true_pos[pred_tag] += 1
+                else:
+                    false_pos[pred_tag] += 1
+                    false_neg[label_tag] += 1
 
                 total += 1.0
-        return num_correct/total
+
+        precision = {}
+        recall = {}
+        for tag in self.tags:
+            if ((true_pos[tag] + false_pos[tag]) > 0) : precision[tag] = true_pos[tag] / (true_pos[tag] + false_pos[tag])
+            else : precision[tag] = 0
+            if ((true_pos[tag] + false_neg[tag]) > 0) : recall[tag] = true_pos[tag] / (true_pos[tag] + false_neg[tag])
+            else : recall[tag] = 0
+
+        precision_df = pd.DataFrame([precision])
+        recall_df = pd.DataFrame([recall])
+
+        precision_df.to_csv(f'./Data/precision_{algType}_{self.lang}.csv')
+        recall_df.to_csv(f'./Data/recall_{algType}_{self.lang}.csv')
+
+        accuracy = num_correct/total
+        return accuracy
 
     def calc_confusion_matrix(self, predictions, title):
         """
@@ -439,7 +463,7 @@ def main(lang, flag):
     # Run Eager Algorithm
     result, duration = tagger.run(1)
     print('EAGER Algorithm')
-    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Accuracy     :', tagger.calc_accuracy(result, "eager"))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Eager Algorithm')
 
@@ -448,7 +472,7 @@ def main(lang, flag):
     # Run Viterbi Algorithm
     result, duration = tagger.run(2)
     print('VITERBI Algorithm')
-    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Accuracy     :', tagger.calc_accuracy(result, 'viterbi'))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Viterbi Algorithm')
 
@@ -457,7 +481,7 @@ def main(lang, flag):
     # Run Individual Most Probable Tag Algorithm
     result, duration = tagger.run(3)
     print("IMPT Algorithm")
-    print('  Accuracy     :', tagger.calc_accuracy(result))
+    print('  Accuracy     :', tagger.calc_accuracy(result, 'impt'))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Individual Most Probable Tag Algorithm')
 
