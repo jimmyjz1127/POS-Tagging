@@ -6,6 +6,8 @@ treebank = {}
 treebank['en'] = './treebanks/UD_English-LinES/en_lines'
 treebank['sv'] = './treebanks/UD_Swedish-LinES/sv_lines'
 treebank['ko'] = './treebanks/UD_Korean-GSD/ko_gsd'
+treebank['es'] = './treebanks/UD_Spanish-GSD/es_gsd'
+treebank['ch'] = './treebanks/UD_Chinese-GSDSimp/zh_gsdsimp'
 
 def train_corpus(lang):
     return treebank[lang] + '-ud-train.conllu'

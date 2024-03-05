@@ -455,6 +455,7 @@ class Tagger():
         plt.savefig(f'./Figures/{image_name}_{self.lang}.png')
 
 
+
 def main(lang, flag):
     tagger = Tagger(lang)
 
@@ -492,7 +493,7 @@ if __name__ == '__main__':
     flag = False
     lang = 'en'
     if (len(sys.argv) >= 2):
-        if sys.argv[1] in ['en', 'ko', 'sv']:
+        if sys.argv[1] in ['en', 'ko', 'sv', 'ch', 'es']:
             lang = sys.argv[1]
     if ("conf" in sys.argv):
         flag = True
