@@ -1,13 +1,10 @@
 from nltk import FreqDist, WittenBellProbDist, LaplaceProbDist, KneserNeyProbDist
-import os
 import numpy as np 
-import pandas 
 import sys 
 from treebanks import conllu_corpus, train_corpus, test_corpus
 from math import exp, log
 import re
 import pprint
-import json
 from nltk.util import ngrams
 from sys import float_info
 from math import log, exp
@@ -15,6 +12,7 @@ import time
 import pandas as pd 
 import seaborn as sns
 import matplotlib.pyplot as plt 
+import random
 
 
 class Tagger():
@@ -26,6 +24,10 @@ class Tagger():
         # Import treebanks 
         self.train_sents = conllu_corpus(train_corpus(lang))
         self.test_sents = conllu_corpus(test_corpus(lang))
+
+        self.combined = self.train_sents + self.test_sents
+        self.train_sents = self.combined[0:3177]
+        self.test_sents = self.combined[3177:4212]
 
         # pre-process train and test sentences 
         self.train_sents = self.preprocess_sentences(self.train_sents)
@@ -40,7 +42,6 @@ class Tagger():
         # get smoothed emission and transisions (bigram)
         self.emissions = self.init_smoothed_emission_dist(self.train_sents, self.tags)
         self.transitions = self.init_smoothed_transition_dist(self.train_sents)
-
 
 
     def preprocess_sentences(self, sentences):
@@ -121,7 +122,6 @@ class Tagger():
             word = token[0] # the word to predict tag for 
 
             # list of all possible (tag, emission_prob * transistion_prob) for the given word
-            # probs = [(tag, self.emissions[tag].logprob(word) + self.transitions.logprob((prev_tag, tag))) for tag in self.tags_none]
             probs = [(tag, self.emissions[tag].logprob(word) + self.transitions[prev_tag].logprob(tag)) for tag in self.tags_none]
 
             # tag with highest probability 
