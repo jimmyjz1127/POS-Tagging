@@ -25,10 +25,6 @@ class Tagger():
         self.train_sents = conllu_corpus(train_corpus(lang))
         self.test_sents = conllu_corpus(test_corpus(lang))
 
-        self.combined = self.train_sents + self.test_sents
-        self.train_sents = self.combined[0:3177]
-        self.test_sents = self.combined[3177:4212]
-
         # pre-process train and test sentences 
         self.train_sents = self.preprocess_sentences(self.train_sents)
         self.test_sents =  self.preprocess_sentences(self.test_sents)
@@ -376,7 +372,7 @@ class Tagger():
         else:
             return m + log(sum([exp(val - m) for val in vals]))
 
-    def calc_accuracy(self, predictions, algType):
+    def calc_accuracy(self, predictions, algType, flag):
         """
             Calculates the accuracy of an algorithm by comparing its predicted tags against actual tags 
 
@@ -408,19 +404,20 @@ class Tagger():
 
                 total += 1.0
 
-        precision = {}
-        recall = {}
-        for tag in self.tags:
-            if ((true_pos[tag] + false_pos[tag]) > 0) : precision[tag] = true_pos[tag] / (true_pos[tag] + false_pos[tag])
-            else : precision[tag] = 0
-            if ((true_pos[tag] + false_neg[tag]) > 0) : recall[tag] = true_pos[tag] / (true_pos[tag] + false_neg[tag])
-            else : recall[tag] = 0
+        if (flag):
+            precision = {}
+            recall = {}
+            for tag in self.tags:
+                if ((true_pos[tag] + false_pos[tag]) > 0) : precision[tag] = true_pos[tag] / (true_pos[tag] + false_pos[tag])
+                else : precision[tag] = 0
+                if ((true_pos[tag] + false_neg[tag]) > 0) : recall[tag] = true_pos[tag] / (true_pos[tag] + false_neg[tag])
+                else : recall[tag] = 0
 
-        precision_df = pd.DataFrame([precision])
-        recall_df = pd.DataFrame([recall])
+            precision_df = pd.DataFrame([precision])
+            recall_df = pd.DataFrame([recall])
 
-        precision_df.to_csv(f'./Data/precision_{algType}_{self.lang}.csv')
-        recall_df.to_csv(f'./Data/recall_{algType}_{self.lang}.csv')
+            precision_df.to_csv(f'./Data/precision_{algType}_{self.lang}.csv')
+            recall_df.to_csv(f'./Data/recall_{algType}_{self.lang}.csv')
 
         accuracy = num_correct/total
         return accuracy
@@ -457,6 +454,7 @@ class Tagger():
 
 
 def main(lang, flag):
+    flag = 0
     tagger = Tagger(lang)
 
     print('\n======================================\n')
@@ -464,7 +462,7 @@ def main(lang, flag):
     # Run Eager Algorithm
     result, duration = tagger.run(1)
     print('EAGER Algorithm')
-    print('  Accuracy     :', tagger.calc_accuracy(result, "eager"))
+    print('  Accuracy     :', tagger.calc_accuracy(result, "eager", flag))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Eager Algorithm')
 
@@ -473,7 +471,7 @@ def main(lang, flag):
     # Run Viterbi Algorithm
     result, duration = tagger.run(2)
     print('VITERBI Algorithm')
-    print('  Accuracy     :', tagger.calc_accuracy(result, 'viterbi'))
+    print('  Accuracy     :', tagger.calc_accuracy(result, 'viterbi', flag))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Viterbi Algorithm')
 
@@ -482,7 +480,7 @@ def main(lang, flag):
     # Run Individual Most Probable Tag Algorithm
     result, duration = tagger.run(3)
     print("IMPT Algorithm")
-    print('  Accuracy     :', tagger.calc_accuracy(result, 'impt'))
+    print('  Accuracy     :', tagger.calc_accuracy(result, 'impt', flag))
     print('  Time Elapsed :', str(duration) + 's')
     if (flag) : tagger.calc_confusion_matrix(result, 'Individual Most Probable Tag Algorithm')
 
