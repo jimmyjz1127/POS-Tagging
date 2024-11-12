@@ -2,6 +2,13 @@
 ## Matriculation ID : 190015412 
 ## Date : March 6, 2024
 
+Implements 3 different Hidden Markov Model based POS Tagging Algorithms:
+1) Naive Eager Algorithm
+2) Viterbi Algorithm
+3) Individual Most Probable Tag (Posterior Decoding) Algorithm
+
+POS Tagging executed on Universal Dependency Corpus (for English, Swedish, Korean, and Chinese).
+
 ### To Install Necessary Dependencies 
 pip install nltk pandas pyarrow seaborn matplotlib conllu 
 
