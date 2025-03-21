@@ -1,5 +1,5 @@
-#  CS5012 Deliverable 1 : POS Tagging 
-## Matriculation ID : 190015412 
+#  Parts Of Speech Tagging Algorithms 
+## Author : Jimmy Zhang (jimmyjz1127)
 ## Date : March 6, 2024
 
 Implements 3 different Hidden Markov Model based POS Tagging Algorithms:
