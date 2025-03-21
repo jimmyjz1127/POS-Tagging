@@ -10,23 +10,23 @@ Implements 3 different Hidden Markov Model based POS Tagging Algorithms:
 POS Tagging executed on Universal Dependency Corpus (for English, Swedish, Korean, and Chinese).
 
 ### To Install Necessary Dependencies 
-pip install nltk pandas pyarrow seaborn matplotlib conllu 
+`pip install nltk pandas pyarrow seaborn matplotlib conllu`
 
 ### Execution Instructions 
 1. To execute all algorithms on english language :  
-    python p1.py 
+    `python p1.py`
 2. To specify a language run algorithms on :  
-    python p1.py [en | sv | ko | ...]
+    `python p1.py [en | sv | ko | ...]`
 3. To generate confusion matrix :  
-    python p1.py conf   
+    `python p1.py conf`   
     OR  
-    python p1.py [en | sv | ko | ...] conf 
+    `python p1.py [en | sv | ko | ...] conf` 
 
 
 ### Files & Directories 
 .  
-├── Figures/            : evaluation visuals & plots  
-├── treebanks/          : Universal Dependency treebanks  
-├── StarterCode/        : provided code examples  
-├── p1.py               : implementation of algorithms    
-└── treebanks.py        : code for accessing treebanks 
+├── `Figures/`            : evaluation visuals & plots  
+├── `treebanks/`          : Universal Dependency treebanks  
+├── `StarterCode/`        : provided code examples  
+├── `p1.py`               : implementation of algorithms    
+└── `treebanks.py`        : code for accessing treebanks 
